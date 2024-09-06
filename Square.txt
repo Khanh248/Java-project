@@ -1,0 +1,15 @@
+package MergeGame_KhanhNguyen;
+
+public class Square {
+	int size;
+    int row;
+    int col;
+
+    public Square(int size, int row, int col) {
+        this.size = size;
+        this.row = row;
+        this.col = col;
+    }
+
+}
+

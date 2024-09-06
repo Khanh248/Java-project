@@ -1,0 +1,309 @@
+package MergeGame_KhanhNguyen;
+
+
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
+
+public class MergeGame extends JPanel implements KeyListener {
+
+	private static final int BOARD_SIZE = 15; // Size of the board
+	private static final int CELL_SIZE = 30; // Size of each cell in pixels
+	private int score = 0;
+	private JLabel scoreLabel = new JLabel("Score: " + score);
+	private Random random = new Random();
+	private int fallingSize; // The size of the falling square
+	private int fallingCol; // The column of the falling square
+	private int fallingRow; // The row of the falling square
+	private boolean isFalling = false;
+	private Timer timer;
+	private List<Square> squares = new ArrayList<>();
+
+	public MergeGame() {
+		setPreferredSize(new Dimension(CELL_SIZE * BOARD_SIZE, CELL_SIZE * BOARD_SIZE)); // size of JPanel
+		setBackground(Color.WHITE);
+		addKeyListener(this);
+		setFocusable(true);
+
+		// Initialize and start the timer of falling square
+		timer = new Timer(300, new ActionListener() {
+	        @Override
+	        public void actionPerformed(ActionEvent e) {
+	            if (isFalling) {
+	                dropSquare();
+	                checkForMerges(); // Check for any merges between squares
+	                repaint();
+	            }
+	        }
+	    });
+
+		timer.start();
+
+		startFallingSquare();
+	}
+
+	@Override
+	protected void paintComponent(Graphics g) {
+		super.paintComponent(g);
+		super.paintComponent(g);
+
+		// Draw grid
+		for (int i = 0; i < BOARD_SIZE; i++) {
+			g.drawLine(0, i * CELL_SIZE, BOARD_SIZE * CELL_SIZE, i * CELL_SIZE); // Draws a horizontal line across the board
+			g.drawLine(i * CELL_SIZE, 0, i * CELL_SIZE, BOARD_SIZE * CELL_SIZE); // Draws a vertical line across the board
+																					
+		}
+
+		// Draw all squares
+		for (Square square : squares) {
+			drawSquare(g, square);
+		}
+
+		// Draw the falling square
+		if (isFalling) {
+			drawSquare(g, new Square(fallingSize, fallingRow, fallingCol));
+		}
+	}
+
+	private void drawSquare(Graphics g, Square square) {
+		// Background
+		g.setColor(getColorForSize(square.size));              // because of square so width = height = square.size * CELL_SIZE
+		g.fillRect(square.col * CELL_SIZE, square.row * CELL_SIZE, square.size * CELL_SIZE, square.size * CELL_SIZE);  
+
+		// Border
+		g.setColor(Color.BLACK);
+		g.drawRect(square.col * CELL_SIZE, square.row * CELL_SIZE, square.size * CELL_SIZE, square.size * CELL_SIZE);
+	}
+
+	private Color getColorForSize(int size) {
+
+		// Return a color based on the size of the square. There are 6 different squares with 6 different colors
+
+		Color color;
+		switch (size) {
+		case 1:
+			color = Color.RED;
+			break;
+		case 2:
+			color = Color.GREEN;
+			break;
+		case 3:
+			color = Color.BLUE;
+			break;
+		case 4:
+			color = Color.YELLOW;
+			break;
+		case 5:
+			color = Color.ORANGE;
+			break;
+		case 6:
+			color = Color.PINK;
+			break;
+		default:
+			color = Color.GRAY;
+			break;
+		}
+		return color;
+	}
+
+	private void startFallingSquare() {
+		fallingSize = random.nextInt(3) + 1; // Random size from 1 to 3 (3 smallest sizes in 6 squares)
+		fallingCol = BOARD_SIZE / 2 - fallingSize / 2; // Position (center the falling square)
+		fallingRow = 0; // Start from the top row
+		isFalling = true;
+	}
+
+	private void dropSquare() {
+		// Checks whether the falling square can be placed one row lower from its current position
+		if (canPlaceSquare(fallingSize, fallingRow + 1, fallingCol)) {
+			fallingRow++;
+		} else {
+
+			// Add the square to the array and start a new falling square
+			squares.add(new Square(fallingSize, fallingRow, fallingCol));
+			isFalling = false;
+			startFallingSquare();
+
+			if (!canPlaceSquare(fallingSize, fallingRow, fallingCol)) {
+				gameOver();
+			}
+		}
+	}
+
+	private boolean canPlaceSquare(int size, int row, int col) {
+		return canPlaceSquare(size, row, col, new ArrayList<>());
+	}
+
+	private boolean canPlaceSquare(int size, int row, int col, List<Square> ignoreSquares) {
+		// checks if a square can be placed at a specified position on the board
+               // If col + size is greater than BOARD_SIZE, it means the rectangle would extend past the right edge of the board
+
+		if (row + size > BOARD_SIZE || col + size > BOARD_SIZE || row < 0 || col < 0) {
+			return false;
+		}
+
+		for (Square square : squares) {
+			 // Check if the square is within the board boundaries
+			if (!ignoreSquares.contains(square) && isOverlapping(square, row, col, size)) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	private boolean isOverlapping(Square existingSquare, int row, int col, int size) {
+		// Check if the new square overlaps with an existing square
+		return existingSquare.row < row + size && existingSquare.row + existingSquare.size > row
+				&& existingSquare.col < col + size && existingSquare.col + existingSquare.size > col;
+	}
+
+	private void checkForMerges() {
+		// When two squares of the same size and adjacent or stacked together are
+		// detected, they are merged into a larger square
+		boolean hasMerged;
+		do {
+			hasMerged = false;
+			List<Square> toRemove = new ArrayList<>(); // hold the squares that need to be removed from the board after
+														// merging
+
+			List<Square> toAdd = new ArrayList<>(); // hold the new squares that are created as a result of merging
+
+			// Iterate over each pair of squares to check for merges
+			for (int i = 0; i < squares.size(); i++) {
+				Square s1 = squares.get(i);
+				for (int j = i + 1; j < squares.size(); j++) {
+					Square s2 = squares.get(j);
+					if (canMerge(s1, s2)) {
+						toRemove.add(s1);
+						toRemove.add(s2);
+						int newSize = s1.size + 1; // Determine the new size for the merged square
+						System.out.println(newSize);
+
+						// Compute new row and column based on new size
+						int newRow = Math.min(s1.row, s2.row); // Uses the minimum of the two original rows
+						if (newSize > 2) {
+							newRow = newRow + (newRow - 2);
+						}
+
+						int newCol = Math.min(s1.col, s2.col);
+
+						// Find the nearest valid position for the new merged square
+						Point validPosition = findNearestValidPosition(newSize, newRow, newCol, toRemove);
+						if (validPosition == null) {
+							gameOver();
+							return;
+						}
+
+						Square newSquare = new Square(newSize, validPosition.x, validPosition.y);
+
+						toAdd.add(newSquare);
+						score += getMergeScore(newSize);
+						hasMerged = true;
+					}
+				}
+			}
+
+			squares.removeAll(toRemove);
+			squares.addAll(toAdd);
+			scoreLabel.setText("Score: " + score);
+		} while (hasMerged);
+
+	}
+
+	private Point findNearestValidPosition(int size, int startRow, int startCol, List<Square> ignoreSquares) {
+		int distance = 0;
+		while (distance < BOARD_SIZE) {
+			// -distance and +distance define the boundaries of this area in both the row and column directions
+			for (int dRow = -distance; dRow <= distance; dRow++) {
+				for (int dCol = -distance; dCol <= distance; dCol++) {
+					int newRow = startRow + dRow;
+					int newCol = startCol + dCol;
+					if (Math.abs(dRow) + Math.abs(dCol) == distance) {
+						// Ensure we're checking points at the current distance
+						if (canPlaceSquare(size, newRow, newCol, ignoreSquares)) {
+							return new Point(newRow, newCol);
+						}
+					}
+				}
+			}
+			distance++;
+		}
+		return null; // If no valid position is found
+	}
+
+	private boolean canMerge(Square s1, Square s2) {
+		// Check if two squares can be merged (Same size)
+		return s1.size == s2.size && (isAdjacent(s1, s2) || isStacked(s1, s2));
+	}
+
+	private boolean isAdjacent(Square s1, Square s2) {
+		// Check if two squares are adjacent to each other
+		return s1.row == s2.row && Math.abs(s1.col - s2.col) == s1.size
+				|| s1.col == s2.col && Math.abs(s1.row - s2.row) == s1.size;
+	}
+
+	private boolean isStacked(Square s1, Square s2) {
+		// Check if two squares are stacked and vertically aligned on top of each other
+		return (s1.row + s1.size == s2.row || s2.row + s2.size == s1.row)
+				&& (s1.col == s2.col || s1.col + s1.size == s2.col || s2.col + s2.size == s1.col);
+	}
+
+	private int getMergeScore(int size) {
+		switch (size) {
+		case 1:
+			return 2;
+		case 2:
+			return 4;
+		case 3:
+			return 6;
+		case 4:
+			return 8;
+		case 5:
+			return 10;
+		case 6:
+			return 12;
+		default:
+			return 0;
+		}
+	}
+
+	private void gameOver() {
+		timer.stop();
+		JOptionPane.showMessageDialog(this, "Game Over! Your score is: " + score);
+	}
+
+	@Override
+	public void keyPressed(KeyEvent e) {
+		// Handle key presses for moving the falling square
+		if (isFalling) {
+			int key = e.getKeyCode();
+			if (key == KeyEvent.VK_LEFT && canPlaceSquare(fallingSize, fallingRow, fallingCol - 1)) {
+				fallingCol--;
+			} else if (key == KeyEvent.VK_RIGHT && canPlaceSquare(fallingSize, fallingRow, fallingCol + 1)) {
+				fallingCol++;
+			}
+			repaint();
+		}
+	}
+
+	@Override
+	public void keyReleased(KeyEvent e) {
+	}
+
+	@Override
+	public void keyTyped(KeyEvent e) {
+	}
+
+	public static void main(String[] args) {
+		JFrame frame = new JFrame("Merge Squares Game");
+		MergeGame game = new MergeGame();
+		frame.add(game, BorderLayout.CENTER);
+		frame.add(game.scoreLabel, BorderLayout.SOUTH);
+		frame.pack(); // Adjust the frame size to fit the content
+		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+		frame.setVisible(true);
+	}
+}
